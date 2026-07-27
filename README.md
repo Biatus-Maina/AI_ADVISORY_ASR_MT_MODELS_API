@@ -20,7 +20,7 @@ The application serves a premium, responsive Gradio user interface at the root U
 
 ## Features
 - **Integrated Speech-to-Text & Translation:** End-to-end processing of audio inputs (microphone or files) to transcribe Swahili or English and translate them dynamically.
-- **Premium Web UI:** Responsive, modern dashboard built with Gradio (hosted at the root path `/`) designed for desktop and mobile clients.
+- **Web UI:** Responsive, modern dashboard built with Gradio (hosted at the root path `/`) designed for desktop and mobile clients.
 - **FastAPI Endpoints:** Fast, asynchronous, type-safe API endpoints for backend integration.
 - **Resource Management:** Memory-optimized loading of weights, pinning automatically between GPU (CUDA) and CPU, with CPU quantization to reduce footprint.
 - **Persistent Cache Mapping:** Keeps Hugging Face models cached locally or inside container volumes to avoid redundant downloads.
