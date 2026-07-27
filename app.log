@@ -1,0 +1,21 @@
+/home/cyborg/Documents/AI4_AGRIC_ADVISORY/nllb_model/Agric_Advisory_APIs/NLLB_Model_API/app.py:151: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'example'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+  text: str = Field(..., min_length=1, example="Hello, how are you today?")
+/home/cyborg/Documents/AI4_AGRIC_ADVISORY/nllb_model/Agric_Advisory_APIs/NLLB_Model_API/app.py:152: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'example'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+  src_lang: str = Field(..., example="en", description="Supported: en, sw, ki, kln")
+/home/cyborg/Documents/AI4_AGRIC_ADVISORY/nllb_model/Agric_Advisory_APIs/NLLB_Model_API/app.py:153: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'example'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+  tgt_lang: str = Field(..., example="sw", description="Supported: en, sw, ki, kln")
+INFO:     Started server process [9737]
+INFO:     Waiting for application startup.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+🚀 Initializing system infrastructure. Loading NLLB-LoRA weights into memory...
+Loading weights:   0%|          | 0/512 [00:00<?, ?it/s]Loading weights: 100%|██████████| 512/512 [00:00<00:00, 7281.93it/s]
+The tied weights mapping and config for this model specifies to tie model.shared.weight to lm_head.weight, but both are present in the checkpoints, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning
+The tied weights mapping and config for this model specifies to tie model.shared.weight to model.decoder.embed_tokens.weight, but both are present in the checkpoints, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning
+The tied weights mapping and config for this model specifies to tie model.shared.weight to model.encoder.embed_tokens.weight, but both are present in the checkpoints, so we will NOT tie them. You should update the config with `tie_word_embeddings=False` to silence this warning
+/home/cyborg/anaconda3/lib/python3.13/site-packages/peft/config.py:220: UserWarning: Unexpected keyword arguments ['lora_ga_config', 'use_bdlora'] for class LoraConfig, these are ignored. This probably means that you're loading a configuration file that was saved using a higher version of the library and additional parameters have been introduced since. It is highly recommended to upgrade the PEFT version before continuing (e.g. by running `pip install -U peft`).
+  warnings.warn(
+🎛️ CPU detected. Merging LoRA weights and applying dynamic quantization to NLLB...
+✅ NLLB Model quantized for CPU.
+✅ Core translation architectures successfully loaded.
+🎙️ Loading Whisper ASR model (microsoft/paza-whisper-large-v3-turbo)...
+Loading weights:   0%|          | 0/587 [00:00<?, ?it/s]Loading weights:  24%|██▍       | 143/587 [00:00<00:00, 1429.52it/s]Loading weights:  49%|████▊     | 286/587 [00:00<00:00, 1098.64it/s]Loading weights:  68%|██████▊   | 401/587 [00:00<00:00, 1022.43it/s]Loading weights:  86%|████████▌ | 506/587 [00:00<00:00, 956.73it/s] Loading weights: 100%|██████████| 587/587 [00:00<00:00, 997.53it/s]

@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.db
+.ipynb_checkpoints
+afrinllb-multilingual-ke-final/
+*.log
+*.mp3
+*.wav
+*.mp4
+Dockerfile
+docker-compose.yml
+deployment_guide.md

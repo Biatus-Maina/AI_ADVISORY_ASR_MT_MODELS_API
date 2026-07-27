@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  agri-translate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agri-translate-app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persists Hugging Face downloaded models on the host machine
+      - ./hf_cache:/cache
+    restart: unless-stopped
+    environment:
+      - HF_HOME=/cache
+      - PORT=8000
+      - HOST=0.0.0.0
+    
+    # --- GPU DEPLOYMENT OPTIONS ---
+    # Uncomment the block below if you have NVIDIA GPU + NVIDIA Container Toolkit installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

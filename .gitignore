@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python bytecode/cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE configurations
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+
+# --- Machine Learning / Model Weights ---
+# The adapter and checkpoints folder contains binary weights and states (approx. 85 MB).
+# Un-comment the line below if you want to keep weights out of your git history
+# (e.g. if you load/download them dynamically or host them on Hugging Face).
+# afrinllb-multilingual-ke-final/
