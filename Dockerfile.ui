@@ -1,0 +1,31 @@
+# Use Python 3.10 slim image for lightweight container
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8080 \
+    HOST=0.0.0.0 \
+    API_URL=http://localhost:8000
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies (curl for health checking/diagnostics)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install only the client dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir gradio==6.20.0 requests==2.31.0
+
+# Copy the frontend script
+COPY ui.py .
+
+# Expose the client port
+EXPOSE 8080
+
+# Run the UI client application
+CMD ["python", "ui.py"]

@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  agri-translate:
+  agri-translate-api:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: agri-translate-app
+      dockerfile: Dockerfile.api
+    container_name: agri-translate-api
     ports:
       - "8000:8000"
     volumes:
@@ -26,3 +26,19 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+
+  agri-translate-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: agri-translate-ui
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - API_URL=http://agri-translate-api:8000
+    depends_on:
+      - agri-translate-api
+

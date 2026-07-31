@@ -97,39 +97,51 @@ The application recognizes the following environment variables:
 
 ### 4. Run the Application
 
-```bash
-python app.py
-```
-On boot, the service:
-1. Detects CUDA availability (and falls back to CPU if unavailable).
-2. Downloads/loads `facebook/nllb-200-distilled-600M` and the LoRA adapter.
-3. Quantizes and merges weights for optimal inference.
-4. Mounts the Gradio user interface on `http://127.0.0.1:8000`.
+Since the API backend and Gradio UI frontend are separated, you must start both services:
+
+- **Start the FastAPI Backend Service:**
+  ```bash
+  python app.py
+  ```
+  On boot, the service loads the ML models (NLLB + Whisper ASR) into memory and runs on `http://127.0.0.1:8000`.
+
+- **Start the Gradio UI Client:**
+  ```bash
+  python ui.py
+  ```
+  The Gradio frontend runs on `http://127.0.0.1:8080`. By default, it communicates with the local API at `http://127.0.0.1:8000`. You can configure the API endpoint using the `API_URL` environment variable:
+  ```bash
+  API_URL=http://your-remote-api-ip:8000 python ui.py
+  ```
 
 ---
 
 ## Docker Deployment
 
-The application includes a `Dockerfile` and `docker-compose.yml` for containerized environments.
+The application uses two separate Dockerfiles to enable optimized containerized setups (e.g. keeping the UI container extremely small and resource-efficient).
 
 ### Option A: Standard Build & Run (Docker CLI)
 
-1. **Build the image:**
+1. **Build the images:**
    ```bash
-   docker build -t agri-translate-app:latest .
+   # Build the API Backend
+   docker build -t agri-translate-api:latest -f Dockerfile.api .
+
+   # Build the Gradio UI Client
+   docker build -t agri-translate-ui:latest -f Dockerfile.ui .
    ```
 
-2. **Run the container (CPU Mode):**
+2. **Run the API Backend (CPU Mode):**
    ```bash
    docker run -d \
      -p 8000:8000 \
      -v $(pwd)/hf_cache:/cache \
      -e HF_HOME=/cache \
-     --name agri-translate \
-     agri-translate-app:latest
+     --name agri-translate-api \
+     agri-translate-api:latest
    ```
 
-3. **Run the container (NVIDIA GPU Mode):**
+3. **Run the API Backend (NVIDIA GPU Mode):**
    *(Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed on host)*
    ```bash
    docker run -d \
@@ -137,30 +149,31 @@ The application includes a `Dockerfile` and `docker-compose.yml` for containeriz
      --gpus all \
      -v $(pwd)/hf_cache:/cache \
      -e HF_HOME=/cache \
-     --name agri-translate \
-     agri-translate-app:latest
+     --name agri-translate-api \
+     agri-translate-api:latest
+   ```
+
+4. **Run the Gradio UI Frontend:**
+   ```bash
+   docker run -d \
+     -p 8080:8080 \
+     -e API_URL=http://<host-ip-address>:8000 \
+     --name agri-translate-ui \
+     agri-translate-ui:latest
    ```
 
 ### Option B: Using Docker Compose (Recommended)
 
-Docker Compose automatically configures container parameters and binds a persistent volume `hf_cache` on the host to avoid re-downloading model files (~5GB) when container resets.
+Docker Compose starts both containers automatically and maps their internal networks so they can communicate seamlessly. It also configures a persistent volume `hf_cache` on the host to avoid re-downloading model files (~5GB).
 
 1. **Uncomment GPU settings in `docker-compose.yml` (if using GPU):**
-   Open `docker-compose.yml` and uncomment the `deploy` block under the services section:
-   ```yaml
-       deploy:
-         resources:
-           reservations:
-             devices:
-               - driver: nvidia
-                 count: all
-                 capabilities: [gpu]
-   ```
+   Open `docker-compose.yml` and uncomment the `deploy` block under the `agri-translate-api` service.
 
 2. **Start the Stack:**
    ```bash
    docker-compose up -d --build
    ```
+   The UI will be accessible on port `8080` (`http://localhost:8080`) and the API will be accessible on port `8000` (`http://localhost:8000`).
 
 3. **Stop the Stack:**
    ```bash
@@ -171,21 +184,21 @@ Docker Compose automatically configures container parameters and binds a persist
 
 ## Production VPS / EC2 Deployment
 
-Follow these steps to deploy the API to a remote Linux VPS (Ubuntu 20.04/22.04 LTS) e.g., on AWS EC2, DigitalOcean, or Linode.
+Because the services are decoupled, they can be deployed on different machines. For example, you can host the heavy machine learning models on a GPU-enabled instance, and host the Gradio UI on a small, cheap CPU instance.
 
 ### 1. Set Up the Application Service (systemd)
 
-Creating a systemd service keeps the app running in the background and automatically restarts it if the server reboots or crashes.
+Creating a systemd service keeps the backend running automatically.
 
-1. Create a service file:
+1. Create a service file for the API:
    ```bash
-   sudo nano /etc/systemd/system/agri-translate.service
+   sudo nano /etc/systemd/system/agri-translate-api.service
    ```
 
-2. Paste the following configuration, replacing `/path/to/NLLB_Model_API` with the absolute path of your workspace:
+2. Paste the configuration below (replace `/home/ubuntu/NLLB_Model_API` with your workspace directory path):
    ```ini
    [Unit]
-   Description=AfriNLLB Translation & ASR Matrix API
+   Description=AfriNLLB Translation & ASR Backend API
    After=network.target
 
    [Service]
@@ -197,86 +210,27 @@ Creating a systemd service keeps the app running in the background and automatic
    Environment="PORT=8000"
    Environment="HOST=127.0.0.1"
    Environment="HF_HOME=/home/ubuntu/.cache/huggingface"
-   # Environment="HF_TOKEN=your_huggingface_token" # Uncomment if using private repos
 
    [Install]
    WantedBy=multi-user.target
    ```
 
-3. Reload systemd, enable, and start the service:
+3. Enable and start the service:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable agri-translate.service
-   sudo systemctl start agri-translate.service
+   sudo systemctl enable agri-translate-api.service
+   sudo systemctl start agri-translate-api.service
    ```
 
-4. Verify it is running properly:
-   ```bash
-   sudo systemctl status agri-translate.service
-   journalctl -u agri-translate.service -n 50 -f
-   ```
-
-### 2. Configure Nginx Reverse Proxy with SSL
-
-It is highly recommended to place the app behind a reverse proxy like Nginx to handle SSL certificates (HTTPS) and serve traffic securely on port 80/443.
-
-1. Install Nginx:
-   ```bash
-   sudo apt update
-   sudo apt install -y nginx
-   ```
-
-2. Create a new site configuration file:
-   ```bash
-   sudo nano /etc/nginx/sites-available/agri-translate
-   ```
-
-3. Paste the config block below (replace `api.yourdomain.com` with your real domain):
-   ```nginx
-   server {
-       listen 80;
-       server_name api.yourdomain.com;
-
-       location / {
-           proxy_pass http://127.0.0.1:8000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
-           
-           # Increase upload size limit for larger audio files
-           client_max_body_size 50M;
-           
-           # Timeouts for heavy models
-           proxy_read_timeout 300;
-           proxy_connect_timeout 300;
-           proxy_send_timeout 300;
-       }
-   }
-   ```
-
-4. Enable the configuration and restart Nginx:
-   ```bash
-   sudo ln -s /etc/nginx/sites-available/agri-translate /etc/nginx/sites-enabled/
-   sudo nginx -t
-   sudo systemctl restart nginx
-   ```
-
-5. Secure with SSL using Let's Encrypt (Certbot):
-   ```bash
-   sudo apt install -y certbot python3-certbot-nginx
-   sudo certbot --nginx -d api.yourdomain.com
-   ```
-   *Follow the prompts to finalize the HTTPS configuration.*
+4. Repeat steps to run the UI service (`agri-translate-ui.service`) using `/home/ubuntu/NLLB_Model_API/.venv/bin/python ui.py` with `PORT=8080` and `API_URL=http://127.0.0.1:8000`.
 
 ---
 
 ## API Documentation
 
 ### 1. Interactive UI Client
-- **URL:** `http://<your-server-ip>:8000/` (or `https://api.yourdomain.com/` in production)
-- **Description:** A beautiful Gradio UI allowing clients to speak directly into their microphone or upload audio files, dynamically transcribing it and translating it.
+- **URL:** `http://<your-server-ip>:8080/` (or `https://yourdomain.com/` in production)
+- **Description:** A beautiful Gradio UI allowing clients to record audio via their microphone or upload audio files, dynamically transcribing it and translating it.
 
 ### 2. Translation Endpoint
 - **URL:** `/translate`
@@ -298,30 +252,39 @@ It is highly recommended to place the app behind a reverse proxy like Nginx to h
   ```json
   {
     "source_text": "Hello, how are you today?",
-    "translated_text": "Habari, umeamkaje leo?",
+    "translated_text": "Halo, unaendeleaje leo?",
     "src_lang": "en",
     "tgt_lang": "sw"
   }
   ```
-- **cURL Request Sample:**
-  ```bash
-  curl -X POST "http://localhost:8000/translate" \
-       -H "Content-Type: application/json" \
-       -d '{"text": "Hello, how are you today?", "src_lang": "en", "tgt_lang": "sw"}'
+
+### 3. Speech Transcription & Translation Endpoint (Gradio Backend)
+- **URL:** `/process-audio`
+- **Method:** `POST`
+- **Headers:** `Content-Type: multipart/form-data`
+- **Request Parameters:**
+  - `file` (binary): The audio file to process.
+  - `language_choice` (string, Form parameter): Optional language choice/hint. Defaults to `"Auto-detect"` (options: `"Auto-detect"`, `"Swahili"`, `"English"`).
+- **Response Sample:**
+  ```json
+  {
+    "transcript": "Habari za asubuhi",
+    "translation": "Good morning"
+  }
   ```
 
-### 3. Health Check
+### 4. Health Check
 - **URL:** `/health`
 - **Method:** `GET`
 - **Response Sample:**
   ```json
   {
     "status": "healthy",
-    "gpu_active": true
+    "gpu_active": false
   }
   ```
 
-### 4. Developer Interactive API Specs
+### 5. Developer Interactive API Specs
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc:** `http://localhost:8000/redoc`
 
@@ -345,3 +308,4 @@ If you want to use the local checkpoint stored inside the repository:
 Loading Whisper and NLLB simultaneously can lead to out-of-memory errors on smaller systems. 
 - Ensure you have at least 8 GB of swap space configured if running on a 4 GB RAM/VRAM VPS.
 - If you notice heavy lag during model downloads, verify that Nginx timeouts are configured to `300s` or higher as models download sequentially on the first boot.
+

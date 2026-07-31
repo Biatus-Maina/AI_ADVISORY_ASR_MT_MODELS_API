@@ -2,8 +2,10 @@ import torch
 import static_ffmpeg
 static_ffmpeg.add_paths()
 
-import gradio as gr
-from fastapi import FastAPI, HTTPException
+import os
+import shutil
+import tempfile
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -162,22 +164,29 @@ async def perform_translation(payload: TranslationRequest):
 async def health_check():
     """System heartbeat verification indicator."""
     return {"status": "healthy", "gpu_active": torch.cuda.is_available()}
+# API ENDPOINTS FOR AUDIO TRANSCRIPTION & TRANSLATION
 
+@app.post("/transcribe")
+async def perform_transcription(
+    file: UploadFile = File(...),
+    language_choice: str = Form("Auto-detect")
+):
+    """
+    Accepts an audio file upload, transcribes it using Whisper, and returns the transcript.
+    """
+    asr_pipeline = ml_models.get("asr_pipeline")
+    if not asr_pipeline:
+        raise HTTPException(status_code=503, detail="Whisper ASR model is not loaded.")
 
-# Gradio processing logic
-# Gradio processing logic
-def process_audio(audio_path, language_choice="Auto-detect"):
-    if not audio_path:
-        return "Tafadhali weka sauti.", ""
-    
+    # Save the uploaded file to a temporary file
+    suffix = os.path.splitext(file.filename)[1] if file.filename else ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
     try:
-        asr_pipeline = ml_models.get("asr_pipeline")
-        if not asr_pipeline:
-            return "Kosa: Whisper model haijapakiwa.", ""
+        print(f"🎙️ Transcribing: {file.filename} with language hint: {language_choice}")
         
-        print(f"🎙️ Transcribing: {audio_path} with language hint: {language_choice}")
-        
-        # Configure generation kwargs based on user choice or auto-detection
         generate_kwargs = {
             "task": "transcribe",
             "no_repeat_ngram_size": 4
@@ -186,21 +195,71 @@ def process_audio(audio_path, language_choice="Auto-detect"):
             generate_kwargs["language"] = "sw"
         elif language_choice == "English":
             generate_kwargs["language"] = "en"
-        # If "Auto-detect", Whisper identifies the spoken language automatically
 
         result = asr_pipeline(
-            audio_path,
+            tmp_path,
             generate_kwargs=generate_kwargs,
             return_timestamps=True
         )
         transcript_text = result["text"]
         
-        # Strip any Whisper special tokens (e.g. <|transcribe|>, <|notimestamps|>, etc.)
+        # Strip any Whisper special tokens
         import re
         transcript_text = re.sub(r"<\|.*?\|>", "", transcript_text).strip()
         
-        if not transcript_text or not transcript_text.strip():
-            return "Haikupata maneno yoyote.", ""
+        return {"transcript": transcript_text}
+    except Exception as e:
+        print(f"❌ Transcription error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+@app.post("/process-audio")
+async def process_audio_endpoint(
+    file: UploadFile = File(...),
+    language_choice: str = Form("Auto-detect")
+):
+    """
+    Accepts an audio file upload, transcribes it, and dynamically translates the transcript.
+    Matches the original Gradio process_audio workflow.
+    """
+    asr_pipeline = ml_models.get("asr_pipeline")
+    if not asr_pipeline:
+        raise HTTPException(status_code=503, detail="Whisper ASR model is not loaded.")
+
+    # Save the uploaded file to a temporary file
+    suffix = os.path.splitext(file.filename)[1] if file.filename else ".wav"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        print(f"🎙️ Processing Audio: {file.filename} with language hint: {language_choice}")
+        
+        generate_kwargs = {
+            "task": "transcribe",
+            "no_repeat_ngram_size": 4
+        }
+        if language_choice == "Swahili":
+            generate_kwargs["language"] = "sw"
+        elif language_choice == "English":
+            generate_kwargs["language"] = "en"
+
+        result = asr_pipeline(
+            tmp_path,
+            generate_kwargs=generate_kwargs,
+            return_timestamps=True
+        )
+        transcript_text = result["text"]
+        
+        # Strip any Whisper special tokens
+        import re
+        transcript_text = re.sub(r"<\|.*?\|>", "", transcript_text).strip()
+        
+        if not transcript_text:
+            return {"transcript": "Haikupata maneno yoyote.", "translation": ""}
             
         print(f"📝 Transcript: {transcript_text}")
         
@@ -216,100 +275,16 @@ def process_audio(audio_path, language_choice="Auto-detect"):
             translated_text = translate_text(transcript_text, src_lang="sw", tgt_lang="en")
             print(f"🇺🇸 English translation: {translated_text}")
             
-        return transcript_text, translated_text
+        return {
+            "transcript": transcript_text,
+            "translation": translated_text
+        }
     except Exception as e:
         print(f"❌ Processing error: {str(e)}")
-        return f"Kosa wakati wa kuchakata: {str(e)}", ""
-
-
-# Build Premium Gradio Interface
-theme = gr.themes.Soft(
-    primary_hue="emerald",
-    secondary_hue="amber",
-    neutral_hue="slate",
-    font=[gr.themes.GoogleFont("Outfit"), "sans-serif"]
-)
-
-css_styles = """
-.main-header {
-    text-align: center;
-    background: linear-gradient(90deg, #10b981, #f59e0b);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-weight: 800;
-    font-size: 2.8rem !important;
-    margin-bottom: 2px;
-}
-.sub-header {
-    text-align: center;
-    color: #64748b;
-    font-size: 1.2rem;
-    margin-bottom: 30px;
-    font-weight: 500;
-}
-.gradio-container {
-    max-width: 1000px !important;
-    margin: auto !important;
-    padding: 30px !important;
-    border-radius: 20px !important;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
-}
-"""
-
-with gr.Blocks(title="Swahili AgriTranslate") as demo:
-    gr.HTML("<h1 class='main-header'>Swahili AgriTranslate</h1>")
-    gr.HTML("<p class='sub-header'>Swahili Speech Transcription & English Advisory Translation</p>")
-    
-    with gr.Row():
-        with gr.Column(scale=1):
-            audio_input = gr.Audio(
-                sources=["microphone", "upload"],
-                type="filepath",
-                label="Sema au Weka Sauti (Record or Upload Audio)"
-            )
-            language_choice = gr.Dropdown(
-                choices=["Auto-detect", "Swahili", "English"],
-                value="Auto-detect",
-                label="Target Language Hint"
-            )
-            with gr.Row():
-                submit_btn = gr.Button("Tafsiri (Translate)", variant="primary")
-                clear_btn = gr.Button("Futa (Clear)", variant="secondary")
-            
-        with gr.Column(scale=1):
-            transcript_output = gr.Textbox(
-                label="Maandishi ya Sauti (Audio Transcript)",
-                placeholder="Maandishi yataonekana hapa...",
-                interactive=False,
-                buttons=["copy"]
-            )
-            translation_output = gr.Textbox(
-                label="Tafsiri (Translation)",
-                placeholder="Tafsiri itaonekana hapa...",
-                interactive=False,
-                buttons=["copy"]
-            )
-            
-    # Interactive wiring
-    submit_btn.click(
-        fn=process_audio,
-        inputs=[audio_input, language_choice],
-        outputs=[transcript_output, translation_output]
-    )
-    clear_btn.click(
-        fn=lambda: (None, "Auto-detect", "", ""),
-        inputs=None,
-        outputs=[audio_input, language_choice, transcript_output, translation_output]
-    )
-
-# Mount Gradio sub-app at the root path of FastAPI
-app = gr.mount_gradio_app(
-    app,
-    demo,
-    path="/",
-    theme=theme,
-    css=css_styles
-)
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 if __name__ == "__main__":
