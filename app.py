@@ -287,6 +287,12 @@ async def process_audio_endpoint(
             os.remove(tmp_path)
 
 
+# Mount Gradio UI at the root path of the FastAPI server
+import gradio as gr
+from ui import demo
+app = gr.mount_gradio_app(app, demo, path="/")
+
+
 if __name__ == "__main__":
     import uvicorn
     import os
